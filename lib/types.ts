@@ -23,6 +23,22 @@ export interface TeamRecord {
   pct: number;
 }
 
+export interface TransactionCounter {
+  acquisitions: number;
+  drops: number;
+  trades: number;
+  moveToActive: number;
+  moveToIR: number;
+}
+
+export interface ESPNSimulationResult {
+  playoffPct: number;
+  divisionWinPct: number;
+  rank: number;
+  projectedWins: number;
+  projectedLosses: number;
+}
+
 export interface Team {
   id: number;
   name: string;
@@ -34,6 +50,20 @@ export interface Team {
   streakType: "W" | "L" | "T";
   streakLength: number;
   roster: RosterEntry[];
+  transactionCounter: TransactionCounter;
+  espnSimulation: ESPNSimulationResult;
+}
+
+export interface PriorYearStats {
+  season: number;
+  totalPoints: number;
+  gamesPlayed: number;
+  pointsPerGame: number;
+}
+
+export interface ESPNPlayerProjection {
+  seasonTotal: number;
+  perWeek: number;
 }
 
 export interface RosterEntry {
@@ -41,9 +71,17 @@ export interface RosterEntry {
   name: string;
   eligiblePositions: string[];
   lineupSlot: string;
+  lineupSlotId: number;
   isStarter: boolean;
+  isPitcher: boolean;
+  defaultPositionId: number;
   injuryStatus: string | null;
+  ownership: { percentOwned: number; percentStarted: number };
+  acquisitionType: string;
+  acquisitionDate: number;
   stats: PlayerSeasonStats;
+  espnProjection: ESPNPlayerProjection;
+  priorYears: PriorYearStats[];
   projection: PlayerProjection;
 }
 
@@ -66,6 +104,28 @@ export interface PlayerProjection {
   recentForm: number;
   sampleSize: number;
   confidence: number;
+  source: "espn_projection" | "bayesian_blend" | "in_season";
+  espnBaseline: number;
+  injuryMultiplier: number;
+}
+
+export interface ManagerProfile {
+  teamId: number;
+  teamName: string;
+  pitcherStartsPerWeek: number;
+  uniquePitchersUsed: number;
+  acquisitionsPerWeek: number;
+  dropsPerWeek: number;
+  totalTransactions: number;
+  activityScore: number;
+  activityTier: "elite" | "active" | "moderate" | "passive" | "inactive";
+}
+
+export interface LineupEfficiency {
+  teamId: number;
+  efficiency: number;
+  ilPlayersInLineup: number;
+  benchPlayersAboveStarters: number;
 }
 
 export interface TeamProjection {
@@ -75,6 +135,9 @@ export interface TeamProjection {
   stdDev: number;
   powerRating: number;
   rank: number;
+  managerScore: number;
+  lineupEfficiency: number;
+  strengthOfSchedule: number;
 }
 
 export interface MatchupSide {
@@ -151,11 +214,14 @@ export interface LeagueData {
   settings: LeagueSettings;
   teams: Team[];
   teamProjections: TeamProjection[];
+  managerProfiles: ManagerProfile[];
   currentMatchups: MatchupOdds[];
   playoffOdds: PlayoffOdds[];
   championshipOdds: ChampionshipOdds[];
   weeklyHistory: WeeklyHistoryEntry[];
 }
+
+export const PITCHER_POSITION_IDS = new Set([1, 11]);
 
 export const ESPN_POSITION_MAP: Record<number, string> = {
   0: "C",

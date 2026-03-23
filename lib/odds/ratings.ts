@@ -1,42 +1,40 @@
-import type { Team, TeamProjection } from "../types";
+import type { Team, TeamProjection, ManagerProfile, LineupEfficiency } from "../types";
+import { getManagerAdjustments } from "./manager";
 
 /**
- * Compute team power ratings from roster projections.
+ * Compute team power ratings from roster projections,
+ * adjusted for manager activity and lineup efficiency.
  *
- * For each team:
- * 1. Sum projected points of all starters (exclude bench + IL)
- * 2. Combine player variances assuming independence: σ_team = √(Σ σ_i²)
- * 3. Normalize to a 0-100 power rating scale across the league
- *
- * Also accepts historical team-level weekly scores as a fallback/blend
- * for early-season when player-level data is sparse.
+ * Inputs are all derived from real ESPN data — no synthetic values.
  */
 export function computeTeamProjections(
   teams: Team[],
+  managerProfiles: ManagerProfile[],
+  lineupEfficiencies: LineupEfficiency[],
   teamWeeklyScores?: Map<number, Map<number, number>>
 ): TeamProjection[] {
+  const managerMap = new Map(managerProfiles.map((m) => [m.teamId, m]));
+  const lineupMap = new Map(lineupEfficiencies.map((l) => [l.teamId, l]));
+
   const rawProjections = teams.map((team) => {
     const starters = team.roster.filter((r) => r.isStarter);
 
-    const rosterProjectedTotal = starters.reduce(
-      (sum, p) => sum + p.projection.projectedPointsPerWeek,
-      0
-    );
+    let rosterProjectedTotal = 0;
+    let rosterVariance = 0;
 
-    const rosterVariance = starters.reduce(
-      (sum, p) => sum + p.projection.stdDev ** 2,
-      0
-    );
-    const rosterStdDev = Math.sqrt(rosterVariance);
+    for (const p of starters) {
+      const effectiveProjection =
+        p.projection.projectedPointsPerWeek * p.projection.injuryMultiplier;
+      rosterProjectedTotal += effectiveProjection;
+      rosterVariance += p.projection.stdDev ** 2;
+    }
+
+    let rosterStdDev = Math.sqrt(rosterVariance);
 
     const teamScores = teamWeeklyScores?.get(team.id);
-    let finalProjected = rosterProjectedTotal;
-    let finalStdDev = rosterStdDev;
-
     if (teamScores && teamScores.size >= 3) {
       const scores = Array.from(teamScores.values());
-      const teamHistAvg =
-        scores.reduce((s, v) => s + v, 0) / scores.length;
+      const teamHistAvg = scores.reduce((s, v) => s + v, 0) / scores.length;
       const teamHistStdDev = computeStdDev(scores);
 
       const avgConfidence =
@@ -45,31 +43,43 @@ export function computeTeamProjections(
             starters.length
           : 0;
 
-      const rosterWeight = Math.max(0.3, avgConfidence);
-      finalProjected =
+      const rosterWeight = Math.max(0.4, avgConfidence);
+      rosterProjectedTotal =
         rosterProjectedTotal * rosterWeight +
         teamHistAvg * (1 - rosterWeight);
-      finalStdDev =
-        rosterStdDev * rosterWeight +
-        teamHistStdDev * (1 - rosterWeight);
+      rosterStdDev =
+        rosterStdDev * rosterWeight + teamHistStdDev * (1 - rosterWeight);
     }
+
+    const manager = managerMap.get(team.id);
+    const managerAdj = manager
+      ? getManagerAdjustments(manager)
+      : { meanMultiplier: 1, varianceMultiplier: 1 };
+
+    rosterProjectedTotal *= managerAdj.meanMultiplier;
+    rosterStdDev *= managerAdj.varianceMultiplier;
+
+    const lineup = lineupMap.get(team.id);
+    const lineupEff = lineup?.efficiency ?? 1;
+    rosterProjectedTotal *= lineupEff;
 
     return {
       teamId: team.id,
       teamName: team.name,
-      projectedWeeklyTotal: finalProjected,
-      stdDev: Math.max(5, finalStdDev),
+      projectedWeeklyTotal: rosterProjectedTotal,
+      stdDev: Math.max(5, rosterStdDev),
       powerRating: 0,
       rank: 0,
+      managerScore: manager?.activityScore ?? 50,
+      lineupEfficiency: lineupEff,
+      strengthOfSchedule: 0,
     };
   });
 
   return normalizePowerRatings(rawProjections);
 }
 
-function normalizePowerRatings(
-  projections: TeamProjection[]
-): TeamProjection[] {
+function normalizePowerRatings(projections: TeamProjection[]): TeamProjection[] {
   if (projections.length === 0) return [];
 
   const totals = projections.map((p) => p.projectedWeeklyTotal);

@@ -8,11 +8,13 @@ const STANDARD_JUICE = -110;
  * Compute betting odds for all matchups in a given week.
  *
  * For each matchup (Team A vs Team B):
- * - Model scores as independent normals: X_A ~ N(μ_A, σ_A), X_B ~ N(μ_B, σ_B)
- * - Win probability: P(A > B) = Φ((μ_A - μ_B) / √(σ_A² + σ_B²))
- * - Moneyline: probability → American odds with vig
- * - Spread: μ_A - μ_B, rounded to 0.5
- * - Over/Under: μ_A + μ_B, rounded to 0.5
+ * - Model scores as independent normals: X_A ~ N(mu_A, sig_A), X_B ~ N(mu_B, sig_B)
+ * - Win probability: P(A > B) = Phi((mu_A - mu_B) / sqrt(sig_A^2 + sig_B^2))
+ * - Moneyline: probability -> American odds with vig
+ * - Spread: mu_A - mu_B, rounded to 0.5
+ * - Over/Under: mu_A + mu_B, rounded to 0.5
+ *
+ * Skips matchups where either team has no projection data — no fake fallbacks.
  */
 export function computeMatchupOdds(
   matchups: RawMatchup[],
@@ -25,13 +27,12 @@ export function computeMatchupOdds(
     (m) => m.matchupPeriodId === weekNumber
   );
 
-  return weekMatchups.map((m) => {
+  const results: MatchupOdds[] = [];
+
+  for (const m of weekMatchups) {
     const homeProj = projMap.get(m.homeTeamId);
     const awayProj = projMap.get(m.awayTeamId);
-
-    if (!homeProj || !awayProj) {
-      return buildDefaultMatchupOdds(m, weekNumber);
-    }
+    if (!homeProj || !awayProj) continue;
 
     const muHome = homeProj.projectedWeeklyTotal;
     const muAway = awayProj.projectedWeeklyTotal;
@@ -50,7 +51,7 @@ export function computeMatchupOdds(
     const totalRaw = muHome + muAway;
     const totalLine = roundToHalf(totalRaw);
 
-    return {
+    results.push({
       matchupPeriod: weekNumber,
       homeTeam: {
         teamId: m.homeTeamId,
@@ -89,34 +90,8 @@ export function computeMatchupOdds(
         home: Math.round(muHome * 10) / 10,
         away: Math.round(muAway * 10) / 10,
       },
-    };
-  });
-}
+    });
+  }
 
-function buildDefaultMatchupOdds(
-  m: RawMatchup,
-  weekNumber: number
-): MatchupOdds {
-  return {
-    matchupPeriod: weekNumber,
-    homeTeam: {
-      teamId: m.homeTeamId,
-      teamName: `Team ${m.homeTeamId}`,
-      projectedScore: 0,
-      powerRating: 50,
-    },
-    awayTeam: {
-      teamId: m.awayTeamId,
-      teamName: `Team ${m.awayTeamId}`,
-      projectedScore: 0,
-      powerRating: 50,
-    },
-    odds: {
-      moneyline: { home: -110, away: -110 },
-      spread: { favored: "home", line: 0, homeOdds: -110, awayOdds: -110 },
-      overUnder: { total: 0, overOdds: -110, underOdds: -110 },
-    },
-    winProbability: { home: 0.5, away: 0.5 },
-    projectedScore: { home: 0, away: 0 },
-  };
+  return results;
 }

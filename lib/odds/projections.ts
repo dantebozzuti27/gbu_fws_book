@@ -1,86 +1,167 @@
 import type { RosterEntry, PlayerProjection } from "../types";
+import { computePlayerVariance } from "./variance";
+import { getInjuryMultiplier } from "./injuries";
 
-const DECAY_FACTOR = 0.85;
-const MIN_STDDEV = 2.0;
-const LEAGUE_AVG_PPW = 30;
+const ESPN_PRIOR_WEIGHT = 10;
+const EWMA_DECAY = 0.85;
 
 /**
- * Compute player projections for all roster entries on a team.
- * Uses exponentially weighted moving average of weekly scores
- * with recency bias via the decay factor.
+ * Three-phase player projection engine.
+ *
+ * Phase 1 — Preseason (weeks 1-2): ESPN projection is the baseline.
+ * Phase 2 — Early season (weeks 3-8): Bayesian blend of ESPN prior + observed data.
+ * Phase 3 — Mid/late season (weeks 9+): In-season data dominates, ESPN regresses.
+ *
+ * All projections use real ESPN data. No synthetic/fake values.
  */
-export function projectPlayers(roster: RosterEntry[]): RosterEntry[] {
+export function projectPlayers(
+  roster: RosterEntry[],
+  currentWeek: number,
+  totalMatchupPeriods: number
+): RosterEntry[] {
   return roster.map((entry) => ({
     ...entry,
-    projection: computePlayerProjection(entry),
+    projection: computeProjection(entry, currentWeek, totalMatchupPeriods),
   }));
 }
 
-function computePlayerProjection(entry: RosterEntry): PlayerProjection {
-  const weekly = entry.stats.weeklyScores;
-  const sampleSize = weekly.length;
+function computeProjection(
+  entry: RosterEntry,
+  currentWeek: number,
+  totalMatchupPeriods: number
+): PlayerProjection {
+  const espnBaseline = entry.espnProjection.perWeek;
+  const weeklyScores = entry.stats.weeklyScores;
+  const sampleSize = weeklyScores.length;
+  const injuryMult = getInjuryMultiplier(entry);
 
-  if (sampleSize === 0) {
-    return {
-      projectedPointsPerWeek: estimateFallback(entry),
-      stdDev: MIN_STDDEV * 3,
-      recentForm: 1,
-      sampleSize: 0,
-      confidence: 0,
-    };
+  const stdDev = computePlayerVariance(entry, totalMatchupPeriods);
+
+  if (sampleSize === 0 || currentWeek <= 2) {
+    return preseasonProjection(entry, espnBaseline, stdDev, injuryMult);
   }
 
-  const projected = exponentialWeightedAverage(
-    weekly.map((w) => w.points),
-    DECAY_FACTOR
+  if (currentWeek <= 8) {
+    return earlySeasonProjection(
+      entry,
+      espnBaseline,
+      weeklyScores,
+      sampleSize,
+      stdDev,
+      injuryMult
+    );
+  }
+
+  return lateSeasonProjection(
+    entry,
+    espnBaseline,
+    weeklyScores,
+    sampleSize,
+    stdDev,
+    injuryMult
   );
+}
 
-  const stdDev = Math.max(
-    MIN_STDDEV,
-    computeStdDev(weekly.map((w) => w.points))
-  );
+function preseasonProjection(
+  entry: RosterEntry,
+  espnBaseline: number,
+  stdDev: number,
+  injuryMult: number
+): PlayerProjection {
+  let projected = espnBaseline;
 
-  const seasonAvg =
-    weekly.reduce((s, w) => s + w.points, 0) / sampleSize;
-  const recentWeeks = weekly.slice(-2);
-  const recentAvg =
-    recentWeeks.reduce((s, w) => s + w.points, 0) /
-    recentWeeks.length;
-  const recentForm = seasonAvg !== 0 ? recentAvg / seasonAvg : 1;
-
-  const confidence = Math.min(1, Math.sqrt(sampleSize / 10));
+  if (projected <= 0 && entry.priorYears.length > 0) {
+    const recentYear = entry.priorYears[0];
+    projected = recentYear.totalPoints / 25;
+  }
 
   return {
-    projectedPointsPerWeek: projected,
+    projectedPointsPerWeek: projected * injuryMult,
+    stdDev,
+    recentForm: 1.0,
+    sampleSize: 0,
+    confidence: projected > 0 ? 0.7 : 0.1,
+    source: "espn_projection",
+    espnBaseline,
+    injuryMultiplier: injuryMult,
+  };
+}
+
+function earlySeasonProjection(
+  entry: RosterEntry,
+  espnBaseline: number,
+  weeklyScores: { points: number }[],
+  sampleSize: number,
+  stdDev: number,
+  injuryMult: number
+): PlayerProjection {
+  const observedMean =
+    weeklyScores.reduce((s, w) => s + w.points, 0) / sampleSize;
+
+  const posteriorMean =
+    (ESPN_PRIOR_WEIGHT * espnBaseline + sampleSize * observedMean) /
+    (ESPN_PRIOR_WEIGHT + sampleSize);
+
+  const recentForm = computeRecentForm(weeklyScores, observedMean);
+  const confidence = Math.min(0.95, 0.7 + sampleSize * 0.03);
+
+  return {
+    projectedPointsPerWeek: posteriorMean * injuryMult,
     stdDev,
     recentForm,
     sampleSize,
     confidence,
+    source: "bayesian_blend",
+    espnBaseline,
+    injuryMultiplier: injuryMult,
   };
 }
 
-/**
- * When no weekly data exists, fall back to season-level stats
- * or a conservative league-average estimate.
- */
-function estimateFallback(entry: RosterEntry): number {
-  if (entry.stats.pointsPerGame > 0) {
-    const gamesPerWeek = entry.lineupSlot === "SP" ? 2 : 6;
-    return entry.stats.pointsPerGame * gamesPerWeek;
-  }
-  return LEAGUE_AVG_PPW * 0.5;
+function lateSeasonProjection(
+  entry: RosterEntry,
+  espnBaseline: number,
+  weeklyScores: { points: number }[],
+  sampleSize: number,
+  stdDev: number,
+  injuryMult: number
+): PlayerProjection {
+  const ewma = exponentialWeightedAverage(
+    weeklyScores.map((w) => w.points),
+    EWMA_DECAY
+  );
+
+  const espnWeight = Math.max(0.15, 0.3 - sampleSize * 0.01);
+  const projected = ewma * (1 - espnWeight) + espnBaseline * espnWeight;
+
+  const observedMean =
+    weeklyScores.reduce((s, w) => s + w.points, 0) / sampleSize;
+  const recentForm = computeRecentForm(weeklyScores, observedMean);
+  const confidence = Math.min(0.99, 0.8 + sampleSize * 0.01);
+
+  return {
+    projectedPointsPerWeek: projected * injuryMult,
+    stdDev,
+    recentForm,
+    sampleSize,
+    confidence,
+    source: "in_season",
+    espnBaseline,
+    injuryMultiplier: injuryMult,
+  };
 }
 
-/**
- * Exponentially weighted moving average.
- * Most recent observation gets weight 1, then decay^1, decay^2, etc.
- */
-function exponentialWeightedAverage(
-  values: number[],
-  decay: number
+function computeRecentForm(
+  weeklyScores: { points: number }[],
+  seasonMean: number
 ): number {
-  if (values.length === 0) return 0;
+  if (weeklyScores.length < 2 || seasonMean === 0) return 1.0;
+  const recent = weeklyScores.slice(-2);
+  const recentAvg = recent.reduce((s, w) => s + w.points, 0) / recent.length;
+  return recentAvg / seasonMean;
+}
 
+function exponentialWeightedAverage(values: number[], decay: number): number {
+  if (values.length === 0) return 0;
   let weightedSum = 0;
   let weightTotal = 0;
 
@@ -92,14 +173,4 @@ function exponentialWeightedAverage(
   }
 
   return weightedSum / weightTotal;
-}
-
-function computeStdDev(values: number[]): number {
-  if (values.length < 2) return MIN_STDDEV;
-
-  const mean = values.reduce((s, v) => s + v, 0) / values.length;
-  const variance =
-    values.reduce((s, v) => s + (v - mean) ** 2, 0) / (values.length - 1);
-
-  return Math.sqrt(variance);
 }
