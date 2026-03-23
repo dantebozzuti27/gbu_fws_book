@@ -35,7 +35,8 @@ function computeProjection(
   const sampleSize = weeklyScores.length;
   const injuryMult = getInjuryMultiplier(entry);
 
-  const stdDev = computePlayerVariance(entry, totalMatchupPeriods);
+  const weeksElapsed = Math.max(0, currentWeek - 1);
+  const stdDev = computePlayerVariance(entry, totalMatchupPeriods, weeksElapsed);
 
   if (sampleSize === 0 || currentWeek <= 2) {
     return preseasonProjection(entry, espnBaseline, stdDev, injuryMult);

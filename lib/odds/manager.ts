@@ -14,6 +14,20 @@ export function computeManagerProfiles(
   teams: Team[],
   weeksElapsed: number
 ): ManagerProfile[] {
+  if (weeksElapsed < 4) {
+    return teams.map((team) => ({
+      teamId: team.id,
+      teamName: team.name,
+      pitcherStartsPerWeek: 0,
+      uniquePitchersUsed: 0,
+      acquisitionsPerWeek: 0,
+      dropsPerWeek: 0,
+      totalTransactions: 0,
+      activityScore: 50,
+      activityTier: "moderate" as const,
+    }));
+  }
+
   const weeksDivisor = Math.max(1, weeksElapsed);
 
   const rawProfiles = teams.map((team) => {

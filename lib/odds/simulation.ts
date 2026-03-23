@@ -10,8 +10,6 @@ import type { RawMatchup } from "../espn";
 import { sampleNormal, probabilityToAmericanOdds } from "./utils";
 
 const SIMULATION_RUNS = 25_000;
-const ESPN_BLEND_WEIGHT = 0.3;
-const DIVERGENCE_THRESHOLD = 0.20;
 
 interface SimulationResults {
   playoffOdds: PlayoffOdds[];
@@ -132,20 +130,23 @@ export function runSeasonSimulation(
     teams.map((t) => [t.id, t.espnSimulation])
   );
 
+  const weeksElapsed = Math.max(0, currentWeek - 1);
+  const espnWeight = Math.max(0.15, 0.55 - weeksElapsed * 0.03);
+
   const leader = teams.reduce(
     (best, t) => (t.record.wins > best.wins ? { id: t.id, wins: t.record.wins } : best),
     { id: 0, wins: -1 }
   );
   const leaderTeam = teams.find((t) => t.id === leader.id);
+  const teamCount = teams.length;
 
   const playoffOdds: PlayoffOdds[] = teams.map((t) => {
-    let prob = (counters.madePlayoffs.get(t.id) ?? 0) / SIMULATION_RUNS;
+    const rawProb = (counters.madePlayoffs.get(t.id) ?? 0) / SIMULATION_RUNS;
     const topProb = (counters.topSeed.get(t.id) ?? 0) / SIMULATION_RUNS;
 
     const espnSim = espnSimMap.get(t.id);
-    if (espnSim && Math.abs(prob - espnSim.playoffPct) > DIVERGENCE_THRESHOLD) {
-      prob = prob * (1 - ESPN_BLEND_WEIGHT) + espnSim.playoffPct * ESPN_BLEND_WEIGHT;
-    }
+    const espnPct = espnSim?.playoffPct ?? rawProb;
+    const prob = rawProb * (1 - espnWeight) + espnPct * espnWeight;
 
     const leaderLosses = leaderTeam?.record.losses ?? 0;
     const gamesBack = Math.max(
@@ -158,8 +159,8 @@ export function runSeasonSimulation(
       teamName: t.name,
       currentRecord: `${t.record.wins}-${t.record.losses}${t.record.ties > 0 ? `-${t.record.ties}` : ""}`,
       gamesBack,
-      makePlayoffProb: Math.round(prob * 1000) / 1000,
-      topSeedProb: Math.round(topProb * 1000) / 1000,
+      makePlayoffProb: Math.round(prob * 10000) / 10000,
+      topSeedProb: Math.round(topProb * 10000) / 10000,
       americanOdds: probabilityToAmericanOdds(prob),
     };
   });
@@ -167,16 +168,20 @@ export function runSeasonSimulation(
   playoffOdds.sort((a, b) => b.makePlayoffProb - a.makePlayoffProb);
 
   const championshipOdds: ChampionshipOdds[] = teams.map((t) => {
-    const champProb = (counters.wonChampionship.get(t.id) ?? 0) / SIMULATION_RUNS;
-    const finalsProb = (counters.madeFinals.get(t.id) ?? 0) / SIMULATION_RUNS;
-    const semisProb = (counters.madeSemis.get(t.id) ?? 0) / SIMULATION_RUNS;
+    const champRaw = (counters.wonChampionship.get(t.id) ?? 0);
+    const finalsRaw = (counters.madeFinals.get(t.id) ?? 0);
+    const semisRaw = (counters.madeSemis.get(t.id) ?? 0);
+
+    const champProb = (champRaw + 1) / (SIMULATION_RUNS + teamCount);
+    const finalsProb = (finalsRaw + 1) / (SIMULATION_RUNS + teamCount);
+    const semisProb = (semisRaw + 1) / (SIMULATION_RUNS + teamCount);
 
     return {
       teamId: t.id,
       teamName: t.name,
-      winChampionshipProb: Math.round(champProb * 1000) / 1000,
-      makeFinalsProb: Math.round(finalsProb * 1000) / 1000,
-      makeSemisProb: Math.round(semisProb * 1000) / 1000,
+      winChampionshipProb: Math.round(champProb * 10000) / 10000,
+      makeFinalsProb: Math.round(finalsProb * 10000) / 10000,
+      makeSemisProb: Math.round(semisProb * 10000) / 10000,
       americanOdds: probabilityToAmericanOdds(champProb),
     };
   });

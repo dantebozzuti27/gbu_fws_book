@@ -7,24 +7,32 @@ const PITCHER_WEEKLY_CV = 0.45;
 /**
  * Compute per-player weekly standard deviation from multi-year history.
  *
- * Strategy:
- * 1. If player has prior-year actuals, derive variance from year-over-year
- *    point totals scaled to weekly.
- * 2. If insufficient history, use positional coefficient of variation
- *    (pitchers are ~50% more volatile than hitters week-to-week).
- * 3. In-season weekly scores override when available (>= 4 weeks).
+ * Two variance components:
+ * 1. Weekly variance — how much a player's score fluctuates week-to-week.
+ * 2. Projection uncertainty — how wrong the preseason projection might be
+ *    about the player's TRUE mean. This is large early and shrinks to zero
+ *    by week 12 as observed data replaces the projection.
+ *
+ * Without projection uncertainty, the simulation treats ESPN preseason
+ * projections as near-certain, producing wildly polarized playoff odds
+ * (our 9-88% range vs ESPN's own 14-64%).
  */
 export function computePlayerVariance(
   entry: RosterEntry,
-  totalMatchupPeriods: number
+  totalMatchupPeriods: number,
+  weeksElapsed: number = 0
 ): number {
   const weeklyFromInSeason = computeFromWeeklyScores(entry);
-  if (weeklyFromInSeason !== null) return weeklyFromInSeason;
-
   const weeklyFromHistory = computeFromPriorYears(entry, totalMatchupPeriods);
-  if (weeklyFromHistory !== null) return weeklyFromHistory;
+  const weeklyDefault = computePositionalDefault(entry);
 
-  return computePositionalDefault(entry);
+  const weeklyVariance = weeklyFromInSeason ?? weeklyFromHistory ?? weeklyDefault;
+
+  const seasonProgress = Math.min(1, weeksElapsed / 12);
+  const baseline = entry.espnProjection.perWeek;
+  const projUncertainty = baseline * 0.25 * (1 - seasonProgress);
+
+  return Math.sqrt(weeklyVariance ** 2 + projUncertainty ** 2);
 }
 
 function computeFromWeeklyScores(entry: RosterEntry): number | null {
