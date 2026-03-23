@@ -38,10 +38,12 @@ export function sampleNormal(mean: number, stdDev: number): number {
  * Favorite (prob > 0.5): negative number, e.g. -150 means bet $150 to win $100
  * Underdog (prob < 0.5): positive number, e.g. +200 means bet $100 to win $200
  *
- * Includes standard ~4.5% vig (juice) baked into the line.
+ * 10% vig (juice): at a pick'em (50/50), both sides show -110.
+ * Bettor risks $110 to win $100 — the extra $10 protects the book.
+ * VIG = 22/21 so that 0.5 * VIG = 11/21 → exactly -110.
  */
 export function probabilityToAmericanOdds(prob: number): number {
-  const VIG = 1.045;
+  const VIG = 22 / 21;
   const vigProb = Math.min(0.99, Math.max(0.001, prob * VIG));
 
   if (vigProb >= 0.5) {
