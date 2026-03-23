@@ -1,20 +1,37 @@
 import type { Team, ManagerProfile } from "../types";
+import type { HistoricalManagerData } from "../espn";
+
+const SEASON_WEIGHTS: Record<number, number> = {
+  2025: 1.0,
+  2024: 0.7,
+  2023: 0.4,
+  2022: 0.2,
+};
 
 /**
  * Compute manager activity profiles for all teams.
  *
  * Primary signal: pitcher starts per week — active managers stream
  * pitchers aggressively, cycling through the waiver wire to maximize
- * starts. This shows up as high acquisition counts for pitcher-position
- * players and more pitchers rostered overall.
+ * starts.
  *
- * Secondary signals: total acquisitions, drops, lineup moves.
+ * Preseason (< week 4): uses historical transaction data from 2022-2025
+ * as the baseline. Recency-weighted so 2025 counts ~5x more than 2022.
+ *
+ * In-season (>= week 4): blends current-year activity with historical
+ * baseline to avoid overreacting to small sample sizes early on.
  */
 export function computeManagerProfiles(
   teams: Team[],
-  weeksElapsed: number
+  weeksElapsed: number,
+  historicalData: HistoricalManagerData[] = []
 ): ManagerProfile[] {
+  const historicalProfiles = computeHistoricalBaseline(teams, historicalData);
+
   if (weeksElapsed < 4) {
+    if (historicalProfiles.length > 0) {
+      return historicalProfiles;
+    }
     return teams.map((team) => ({
       teamId: team.id,
       teamName: team.name,
@@ -29,14 +46,13 @@ export function computeManagerProfiles(
   }
 
   const weeksDivisor = Math.max(1, weeksElapsed);
+  const histMap = new Map(historicalProfiles.map((p) => [p.teamId, p]));
 
   const rawProfiles = teams.map((team) => {
     const tc = team.transactionCounter;
 
     const pitchersOnRoster = team.roster.filter((r) => r.isPitcher);
-    const activePitchers = pitchersOnRoster.filter(
-      (r) => r.isStarter
-    );
+    const activePitchers = pitchersOnRoster.filter((r) => r.isStarter);
     const recentPitcherPickups = pitchersOnRoster.filter(
       (r) => r.acquisitionType === "ADD"
     ).length;
@@ -52,13 +68,27 @@ export function computeManagerProfiles(
     const totalTransactions =
       tc.acquisitions + tc.drops + tc.trades + tc.moveToActive;
 
+    const histProfile = histMap.get(team.id);
+    const histWeight = Math.max(0, 0.5 - weeksElapsed * 0.03);
+    const currentWeight = 1 - histWeight;
+
+    const blendedAcqPerWeek = histProfile
+      ? acquisitionsPerWeek * currentWeight +
+        histProfile.acquisitionsPerWeek * histWeight
+      : acquisitionsPerWeek;
+
+    const blendedDropsPerWeek = histProfile
+      ? dropsPerWeek * currentWeight +
+        histProfile.dropsPerWeek * histWeight
+      : dropsPerWeek;
+
     return {
       teamId: team.id,
       teamName: team.name,
       pitcherStartsPerWeek,
       uniquePitchersUsed,
-      acquisitionsPerWeek,
-      dropsPerWeek,
+      acquisitionsPerWeek: blendedAcqPerWeek,
+      dropsPerWeek: blendedDropsPerWeek,
       totalTransactions,
       activityScore: 0,
       activityTier: "moderate" as const,
@@ -66,6 +96,68 @@ export function computeManagerProfiles(
   });
 
   return normalizeActivityScores(rawProfiles);
+}
+
+function computeHistoricalBaseline(
+  teams: Team[],
+  historicalData: HistoricalManagerData[]
+): ManagerProfile[] {
+  if (historicalData.length === 0) return [];
+
+  const teamHistMap = new Map<
+    number,
+    { weightedAcq: number; weightedDrops: number; totalWeight: number }
+  >();
+
+  for (const hd of historicalData) {
+    const weight = SEASON_WEIGHTS[hd.season] ?? 0.2;
+    const existing = teamHistMap.get(hd.teamId) ?? {
+      weightedAcq: 0,
+      weightedDrops: 0,
+      totalWeight: 0,
+    };
+
+    const seasonWeeks = 22;
+    existing.weightedAcq += (hd.acquisitions / seasonWeeks) * weight;
+    existing.weightedDrops += (hd.drops / seasonWeeks) * weight;
+    existing.totalWeight += weight;
+
+    teamHistMap.set(hd.teamId, existing);
+  }
+
+  const profiles: ManagerProfile[] = teams.map((team) => {
+    const hist = teamHistMap.get(team.id);
+    if (!hist || hist.totalWeight === 0) {
+      return {
+        teamId: team.id,
+        teamName: team.name,
+        pitcherStartsPerWeek: 0,
+        uniquePitchersUsed: 0,
+        acquisitionsPerWeek: 0,
+        dropsPerWeek: 0,
+        totalTransactions: 0,
+        activityScore: 50,
+        activityTier: "moderate" as const,
+      };
+    }
+
+    const acqPerWeek = hist.weightedAcq / hist.totalWeight;
+    const dropsPerWeek = hist.weightedDrops / hist.totalWeight;
+
+    return {
+      teamId: team.id,
+      teamName: team.name,
+      pitcherStartsPerWeek: 0,
+      uniquePitchersUsed: 0,
+      acquisitionsPerWeek: acqPerWeek,
+      dropsPerWeek: dropsPerWeek,
+      totalTransactions: 0,
+      activityScore: 0,
+      activityTier: "moderate" as const,
+    };
+  });
+
+  return normalizeActivityScores(profiles);
 }
 
 function normalizeActivityScores(
@@ -104,13 +196,8 @@ function normalizeActivityScores(
 /**
  * Apply manager activity factor to team projections.
  *
- * Active managers:
- * - Reduce variance (they optimize lineups, avoid 0-point slots)
- * - Small mean boost (streaming pitchers adds expected value)
- *
- * Passive managers:
- * - Higher variance (suboptimal lineups more likely)
- * - Small mean penalty (missed streaming opportunities)
+ * Active managers get a small mean boost and reduced variance.
+ * Passive managers get a small penalty and increased variance.
  */
 export function getManagerAdjustments(profile: ManagerProfile): {
   meanMultiplier: number;

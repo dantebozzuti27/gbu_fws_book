@@ -383,6 +383,37 @@ export interface HistoricalTeamSeason {
   losses: number;
 }
 
+export interface HistoricalManagerData {
+  teamId: number;
+  teamName: string;
+  season: number;
+  acquisitions: number;
+  drops: number;
+  trades: number;
+  moveToActive: number;
+}
+
+export function parseHistoricalTransactions(
+  raw: any,
+  season: number
+): HistoricalManagerData[] {
+  if (!raw) return [];
+  const teams: any[] = raw.teams ?? [];
+
+  return teams.map((t: any) => {
+    const tc = t.transactionCounter ?? {};
+    return {
+      teamId: t.id,
+      teamName: t.name ?? `Team ${t.id}`,
+      season,
+      acquisitions: tc.acquisitions ?? 0,
+      drops: tc.drops ?? 0,
+      trades: tc.trades ?? 0,
+      moveToActive: tc.moveToActive ?? 0,
+    };
+  });
+}
+
 export function parseHistoricalMatchups(
   raw: any,
   season: number

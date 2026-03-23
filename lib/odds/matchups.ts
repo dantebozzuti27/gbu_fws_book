@@ -2,19 +2,19 @@ import type { MatchupOdds, TeamProjection } from "../types";
 import type { RawMatchup } from "../espn";
 import { normalCDF, probabilityToAmericanOdds, roundToHalf } from "./utils";
 
-const STANDARD_JUICE = -110;
-
 /**
  * Compute betting odds for all matchups in a given week.
  *
- * For each matchup (Team A vs Team B):
- * - Model scores as independent normals: X_A ~ N(mu_A, sig_A), X_B ~ N(mu_B, sig_B)
- * - Win probability: P(A > B) = Phi((mu_A - mu_B) / sqrt(sig_A^2 + sig_B^2))
- * - Moneyline: probability -> American odds with vig
- * - Spread: mu_A - mu_B, rounded to 0.5
- * - Over/Under: mu_A + mu_B, rounded to 0.5
+ * For each matchup (Team A vs Team B), model scores as independent normals:
+ *   X_A ~ N(mu_A, sig_A),  X_B ~ N(mu_B, sig_B)
  *
- * Skips matchups where either team has no projection data — no fake fallbacks.
+ * Moneyline: P(A wins) = Phi((mu_A - mu_B) / sqrt(sig_A^2 + sig_B^2))
+ * Spread:   Set line = round(mu_A - mu_B). Then compute P(A covers) =
+ *           Phi((mu_A - mu_B - line) / combinedSig). Convert to American odds.
+ * O/U:      Set total = round(mu_A + mu_B). Then compute P(over) =
+ *           Phi((mu_A + mu_B - total) / combinedSigTotal). Convert to odds.
+ *
+ * Skips matchups where either team has no projection data.
  */
 export function computeMatchupOdds(
   matchups: RawMatchup[],
@@ -48,8 +48,18 @@ export function computeMatchupOdds(
     const spreadLine = roundToHalf(spreadRaw);
     const favored: "home" | "away" = spreadRaw >= 0 ? "home" : "away";
 
+    const spreadCoverZ =
+      combinedSig > 0 ? (spreadRaw - spreadLine) / combinedSig : 0;
+    const homeCoverProb = normalCDF(spreadCoverZ);
+    const awayCoverProb = 1 - homeCoverProb;
+
     const totalRaw = muHome + muAway;
     const totalLine = roundToHalf(totalRaw);
+
+    const totalSig = Math.sqrt(sigHome ** 2 + sigAway ** 2);
+    const overZ = totalSig > 0 ? (totalRaw - totalLine) / totalSig : 0;
+    const overProb = normalCDF(overZ);
+    const underProb = 1 - overProb;
 
     results.push({
       matchupPeriod: weekNumber,
@@ -73,13 +83,13 @@ export function computeMatchupOdds(
         spread: {
           favored,
           line: Math.abs(spreadLine),
-          homeOdds: STANDARD_JUICE,
-          awayOdds: STANDARD_JUICE,
+          homeOdds: probabilityToAmericanOdds(homeCoverProb),
+          awayOdds: probabilityToAmericanOdds(awayCoverProb),
         },
         overUnder: {
           total: totalLine,
-          overOdds: STANDARD_JUICE,
-          underOdds: STANDARD_JUICE,
+          overOdds: probabilityToAmericanOdds(overProb),
+          underOdds: probabilityToAmericanOdds(underProb),
         },
       },
       winProbability: {

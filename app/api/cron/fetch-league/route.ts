@@ -6,9 +6,10 @@ import {
   parseTeams,
   parseMatchups,
   parseHistoricalMatchups,
+  parseHistoricalTransactions,
   buildWeeklyTeamScores,
 } from "@/lib/espn";
-import type { HistoricalTeamSeason } from "@/lib/espn";
+import type { HistoricalTeamSeason, HistoricalManagerData } from "@/lib/espn";
 import {
   writeRawData,
   writeProcessedData,
@@ -55,6 +56,7 @@ export async function GET(request: Request) {
     const currentWeek = settings.currentMatchupPeriod;
 
     const historicalSeasons: HistoricalTeamSeason[] = [];
+    const historicalManagerData: HistoricalManagerData[] = [];
     for (const year of HISTORICAL_YEARS) {
       let cached = await readHistoricalData(year);
       if (!cached) {
@@ -66,6 +68,7 @@ export async function GET(request: Request) {
       }
       if (cached) {
         historicalSeasons.push(...parseHistoricalMatchups(cached, year));
+        historicalManagerData.push(...parseHistoricalTransactions(cached, year));
       }
     }
 
@@ -76,7 +79,11 @@ export async function GET(request: Request) {
     });
 
     const weeksElapsed = Math.max(1, currentWeek - 1);
-    const managerProfiles = computeManagerProfiles(teamsWithProjections, weeksElapsed);
+    const managerProfiles = computeManagerProfiles(
+      teamsWithProjections,
+      weeksElapsed,
+      historicalManagerData
+    );
 
     const lineupEfficiencies: LineupEfficiency[] = teamsWithProjections.map(
       (team) => analyzeLineup(team.roster, team.id)
