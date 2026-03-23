@@ -56,8 +56,7 @@ export function computeMatchupOdds(
     const totalRaw = muHome + muAway;
     const totalLine = roundToHalf(totalRaw);
 
-    const totalSig = Math.sqrt(sigHome ** 2 + sigAway ** 2);
-    const overZ = totalSig > 0 ? (totalRaw - totalLine) / totalSig : 0;
+    const overZ = combinedSig > 0 ? (totalRaw - totalLine) / combinedSig : 0;
     const overProb = normalCDF(overZ);
     const underProb = 1 - overProb;
 
@@ -93,8 +92,8 @@ export function computeMatchupOdds(
         },
       },
       winProbability: {
-        home: Math.round(homeWinProb * 1000) / 1000,
-        away: Math.round(awayWinProb * 1000) / 1000,
+        home: Math.round(homeWinProb * 10000) / 10000,
+        away: Math.round(awayWinProb * 10000) / 10000,
       },
       projectedScore: {
         home: Math.round(muHome * 10) / 10,

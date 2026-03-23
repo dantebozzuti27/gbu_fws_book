@@ -141,8 +141,10 @@ export function runSeasonSimulation(
   const teamCount = teams.length;
 
   const playoffOdds: PlayoffOdds[] = teams.map((t) => {
-    const rawProb = (counters.madePlayoffs.get(t.id) ?? 0) / SIMULATION_RUNS;
-    const topProb = (counters.topSeed.get(t.id) ?? 0) / SIMULATION_RUNS;
+    const playoffRaw = counters.madePlayoffs.get(t.id) ?? 0;
+    const topRaw = counters.topSeed.get(t.id) ?? 0;
+    const rawProb = (playoffRaw + 1) / (SIMULATION_RUNS + teamCount);
+    const topProb = (topRaw + 1) / (SIMULATION_RUNS + teamCount);
 
     const espnSim = espnSimMap.get(t.id);
     const espnPct = espnSim?.playoffPct ?? rawProb;
@@ -169,7 +171,8 @@ export function runSeasonSimulation(
 
   const rawPlayoffMap = new Map<number, number>();
   for (const t of teams) {
-    rawPlayoffMap.set(t.id, (counters.madePlayoffs.get(t.id) ?? 0) / SIMULATION_RUNS);
+    const playoffRaw = counters.madePlayoffs.get(t.id) ?? 0;
+    rawPlayoffMap.set(t.id, (playoffRaw + 1) / (SIMULATION_RUNS + teamCount));
   }
 
   const rawChampData = teams.map((t) => {
