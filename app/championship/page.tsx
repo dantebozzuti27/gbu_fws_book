@@ -1,5 +1,6 @@
 import { readLatestLeagueData } from "@/lib/s3";
 import { ChampionshipOddsTable } from "@/components/OddsTable";
+import { formatOdds } from "@/lib/odds/utils";
 
 export const revalidate = 3600;
 
@@ -8,8 +9,8 @@ export default async function ChampionshipPage() {
 
   if (!data) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
-        <p className="text-zinc-400">No data available yet.</p>
+      <div className="px-4 py-12 text-center">
+        <p className="text-sm text-zinc-400">No data available yet.</p>
       </div>
     );
   }
@@ -20,122 +21,119 @@ export default async function ChampionshipPage() {
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-zinc-100">
+    <div className="px-4 py-4 space-y-5 lg:max-w-7xl lg:mx-auto lg:px-8">
+      <div>
+        <h1 className="text-lg font-bold text-zinc-100">
           Championship Futures
         </h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Season-long odds to win the title &middot;{" "}
-          {data.meta.simulationRuns.toLocaleString()} simulations
+        <p className="text-[11px] text-zinc-500 mt-0.5">
+          Season-long odds &middot;{" "}
+          {data.meta.simulationRuns.toLocaleString()} sims
         </p>
       </div>
 
       {favorite && (
-        <div className="bg-gradient-to-br from-emerald-900/20 to-zinc-900 border border-emerald-800/30 rounded-xl p-6 mb-8">
+        <div className="bg-gradient-to-br from-emerald-900/20 to-zinc-900 border border-emerald-800/30 rounded-xl p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-emerald-400 uppercase tracking-wider font-medium mb-1">
-                Current Favorite
+            <div className="min-w-0">
+              <p className="text-[10px] text-emerald-400 uppercase tracking-wider font-medium mb-0.5">
+                Favorite
               </p>
-              <h2 className="text-xl font-bold text-zinc-100">
+              <h2 className="text-base font-bold text-zinc-100 truncate">
                 {favorite.teamName}
               </h2>
-              <p className="text-sm text-zinc-400 mt-1">
-                {(favorite.winChampionshipProb * 100).toFixed(1)}% chance to win
-                it all
+              <p className="text-[11px] text-zinc-400 mt-0.5">
+                {(favorite.winChampionshipProb * 100).toFixed(1)}% to win it
+                all
               </p>
             </div>
-            <div className="text-right">
+            <div className="text-right shrink-0 ml-3">
               <div
-                className={`text-3xl font-bold font-mono ${
+                className={`text-2xl font-bold font-mono ${
                   favorite.americanOdds < 0
                     ? "text-emerald-400"
                     : "text-amber-400"
                 }`}
               >
-                {favorite.americanOdds > 0
-                  ? `+${favorite.americanOdds}`
-                  : favorite.americanOdds}
+                {formatOdds(favorite.americanOdds)}
               </div>
-              <p className="text-xs text-zinc-600 mt-1">
-                Championship Odds
-              </p>
+              <p className="text-[10px] text-zinc-600 mt-0.5">Title Odds</p>
             </div>
           </div>
         </div>
       )}
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden mb-8">
-        <div className="px-5 py-3 border-b border-zinc-800">
-          <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
-            Full Futures Board
-          </h2>
+      <section>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-zinc-800">
+            <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+              Full Futures Board
+            </h2>
+          </div>
+          <ChampionshipOddsTable odds={data.championshipOdds} />
         </div>
-        <ChampionshipOddsTable odds={data.championshipOdds} />
-      </div>
+      </section>
 
       {contenders.length > 1 && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-zinc-300 mb-4">
-            Contender Breakdown
-          </h3>
-          <div className="space-y-3">
-            {contenders.map((team) => {
-              const champPct = team.winChampionshipProb * 100;
-              const finalsPct = team.makeFinalsProb * 100;
-              const semisPct = team.makeSemisProb * 100;
+        <section>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+              Contender Breakdown
+            </h3>
+            <div className="space-y-3">
+              {contenders.map((team) => {
+                const champPct = team.winChampionshipProb * 100;
+                const finalsPct = team.makeFinalsProb * 100;
+                const semisPct = team.makeSemisProb * 100;
 
-              return (
-                <div key={team.teamId} className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-200 font-medium">
-                      {team.teamName}
-                    </span>
-                    <span className="text-xs text-zinc-500 font-mono">
-                      {champPct.toFixed(1)}%
-                    </span>
+                return (
+                  <div key={team.teamId} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] text-zinc-200 font-medium truncate">
+                        {team.teamName}
+                      </span>
+                      <span className="text-[11px] text-zinc-500 font-mono shrink-0 ml-2">
+                        {champPct.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex h-2 rounded-full overflow-hidden bg-zinc-800 gap-px">
+                      <div
+                        className="bg-emerald-500 rounded-l-full"
+                        style={{ width: `${champPct}%` }}
+                      />
+                      <div
+                        className="bg-amber-500"
+                        style={{
+                          width: `${Math.max(0, finalsPct - champPct)}%`,
+                        }}
+                      />
+                      <div
+                        className="bg-zinc-600 rounded-r-full"
+                        style={{
+                          width: `${Math.max(0, semisPct - finalsPct)}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex gap-3 text-[10px] text-zinc-600">
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                        Win
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                        Finals
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 inline-block" />
+                        Semis
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex h-3 rounded-full overflow-hidden bg-zinc-800 gap-px">
-                    <div
-                      className="bg-emerald-500 rounded-l-full"
-                      style={{ width: `${champPct}%` }}
-                      title={`Win: ${champPct.toFixed(1)}%`}
-                    />
-                    <div
-                      className="bg-amber-500"
-                      style={{
-                        width: `${Math.max(0, finalsPct - champPct)}%`,
-                      }}
-                      title={`Finals: ${finalsPct.toFixed(1)}%`}
-                    />
-                    <div
-                      className="bg-zinc-600 rounded-r-full"
-                      style={{
-                        width: `${Math.max(0, semisPct - finalsPct)}%`,
-                      }}
-                      title={`Semis: ${semisPct.toFixed(1)}%`}
-                    />
-                  </div>
-                  <div className="flex gap-4 text-[10px] text-zinc-600">
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                      Win
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
-                      Finals
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-zinc-600 inline-block" />
-                      Semis
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

@@ -17,9 +17,9 @@ export function OddsDisplay({
   const isFavorite = odds < 0;
 
   const sizeClasses = {
-    sm: "text-sm px-2 py-0.5",
-    md: "text-base px-3 py-1",
-    lg: "text-lg px-4 py-1.5 font-semibold",
+    sm: "text-[13px] px-2 py-0.5",
+    md: "text-sm px-2.5 py-1",
+    lg: "text-base px-3 py-1.5 font-semibold",
   };
 
   return (
@@ -51,12 +51,12 @@ export function ProbabilityBar({
   return (
     <div className={`w-full ${className}`}>
       {label && (
-        <div className="flex justify-between text-xs text-zinc-400 mb-1">
+        <div className="flex justify-between text-[11px] text-zinc-400 mb-1">
           <span>{label}</span>
           <span>{pct}%</span>
         </div>
       )}
-      <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{
