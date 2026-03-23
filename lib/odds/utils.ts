@@ -42,7 +42,7 @@ export function sampleNormal(mean: number, stdDev: number): number {
  */
 export function probabilityToAmericanOdds(prob: number): number {
   const VIG = 1.045;
-  const vigProb = Math.min(0.99, Math.max(0.01, prob * VIG));
+  const vigProb = Math.min(0.99, Math.max(0.001, prob * VIG));
 
   if (vigProb >= 0.5) {
     return Math.round(-(vigProb / (1 - vigProb)) * 100);
