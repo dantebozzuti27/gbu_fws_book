@@ -46,10 +46,14 @@ export function probabilityToAmericanOdds(prob: number): number {
   const VIG = 22 / 21;
   const vigProb = Math.min(0.99, Math.max(0.001, prob * VIG));
 
+  let odds: number;
   if (vigProb >= 0.5) {
-    return Math.round(-(vigProb / (1 - vigProb)) * 100);
+    odds = Math.round(-(vigProb / (1 - vigProb)) * 100);
+  } else {
+    odds = Math.round(((1 - vigProb) / vigProb) * 100);
   }
-  return Math.round(((1 - vigProb) / vigProb) * 100);
+
+  return Math.max(-1000, Math.min(1000, odds));
 }
 
 /**
