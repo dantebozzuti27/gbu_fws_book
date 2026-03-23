@@ -46,14 +46,34 @@ export function probabilityToAmericanOdds(prob: number): number {
   const VIG = 22 / 21;
   const vigProb = Math.min(0.99, Math.max(0.001, prob * VIG));
 
-  let odds: number;
+  let raw: number;
   if (vigProb >= 0.5) {
-    odds = Math.round(-(vigProb / (1 - vigProb)) * 100);
+    raw = Math.round(-(vigProb / (1 - vigProb)) * 100);
   } else {
-    odds = Math.round(((1 - vigProb) / vigProb) * 100);
+    raw = Math.round(((1 - vigProb) / vigProb) * 100);
   }
 
-  return Math.max(-1000, Math.min(1000, odds));
+  return compressOdds(raw);
+}
+
+/**
+ * Hyperbolic compression for odds beyond ±1000.
+ * Below ±1000: untouched. Above: asymptotes toward ±5000.
+ *
+ *   compressed = sign * (1000 + excess / (1 + excess/4000))
+ *
+ *   +1500 → +1333    +5000 → +3000    +21000 → +4333
+ *   Preserves ordering & relative scale, caps display ~±5000.
+ */
+function compressOdds(raw: number): number {
+  const THRESHOLD = 1000;
+  const RANGE = 4000;
+  const abs = Math.abs(raw);
+  if (abs <= THRESHOLD) return raw;
+
+  const excess = abs - THRESHOLD;
+  const compressed = THRESHOLD + excess / (1 + excess / RANGE);
+  return Math.round(raw > 0 ? compressed : -compressed);
 }
 
 /**
