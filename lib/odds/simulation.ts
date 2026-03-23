@@ -167,22 +167,48 @@ export function runSeasonSimulation(
 
   playoffOdds.sort((a, b) => b.makePlayoffProb - a.makePlayoffProb);
 
-  const championshipOdds: ChampionshipOdds[] = teams.map((t) => {
-    const champRaw = (counters.wonChampionship.get(t.id) ?? 0);
-    const finalsRaw = (counters.madeFinals.get(t.id) ?? 0);
-    const semisRaw = (counters.madeSemis.get(t.id) ?? 0);
+  const rawPlayoffMap = new Map<number, number>();
+  for (const t of teams) {
+    rawPlayoffMap.set(t.id, (counters.madePlayoffs.get(t.id) ?? 0) / SIMULATION_RUNS);
+  }
+
+  const rawChampData = teams.map((t) => {
+    const champRaw = counters.wonChampionship.get(t.id) ?? 0;
+    const finalsRaw = counters.madeFinals.get(t.id) ?? 0;
+    const semisRaw = counters.madeSemis.get(t.id) ?? 0;
 
     const champProb = (champRaw + 1) / (SIMULATION_RUNS + teamCount);
     const finalsProb = (finalsRaw + 1) / (SIMULATION_RUNS + teamCount);
     const semisProb = (semisRaw + 1) / (SIMULATION_RUNS + teamCount);
 
+    const rawPlayoff = rawPlayoffMap.get(t.id) ?? champProb;
+    const blendedPlayoff = playoffOdds.find((p) => p.teamId === t.id)?.makePlayoffProb ?? rawPlayoff;
+    const espnRatio = rawPlayoff > 0.001 ? blendedPlayoff / rawPlayoff : 1;
+
     return {
       teamId: t.id,
       teamName: t.name,
-      winChampionshipProb: Math.round(champProb * 10000) / 10000,
-      makeFinalsProb: Math.round(finalsProb * 10000) / 10000,
-      makeSemisProb: Math.round(semisProb * 10000) / 10000,
-      americanOdds: probabilityToAmericanOdds(champProb),
+      champProb: champProb * espnRatio,
+      finalsProb: finalsProb * espnRatio,
+      semisProb: semisProb * espnRatio,
+    };
+  });
+
+  const champSum = rawChampData.reduce((s, d) => s + d.champProb, 0);
+  const champScale = champSum > 0 ? 1 / champSum : 1;
+
+  const championshipOdds: ChampionshipOdds[] = rawChampData.map((d) => {
+    const normChamp = d.champProb * champScale;
+    const normFinals = Math.min(1, d.finalsProb * champScale);
+    const normSemis = Math.min(1, d.semisProb * champScale);
+
+    return {
+      teamId: d.teamId,
+      teamName: d.teamName,
+      winChampionshipProb: Math.round(normChamp * 10000) / 10000,
+      makeFinalsProb: Math.round(normFinals * 10000) / 10000,
+      makeSemisProb: Math.round(normSemis * 10000) / 10000,
+      americanOdds: probabilityToAmericanOdds(normChamp),
     };
   });
 
