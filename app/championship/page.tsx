@@ -2,7 +2,7 @@ import { readLatestLeagueData } from "@/lib/s3";
 import { ChampionshipOddsTable } from "@/components/OddsTable";
 import { formatOdds } from "@/lib/odds/utils";
 
-export const revalidate = 3600;
+export const revalidate = 1800;
 
 export default async function ChampionshipPage() {
   const data = await readLatestLeagueData();

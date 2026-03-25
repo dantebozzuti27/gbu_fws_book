@@ -1,7 +1,7 @@
 import { readLatestLeagueData } from "@/lib/s3";
 import { PlayoffOddsTable } from "@/components/OddsTable";
 
-export const revalidate = 3600;
+export const revalidate = 1800;
 
 export default async function PlayoffsPage() {
   const data = await readLatestLeagueData();

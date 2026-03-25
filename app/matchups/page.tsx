@@ -1,7 +1,7 @@
 import { readLatestLeagueData } from "@/lib/s3";
 import { MatchupCard } from "@/components/MatchupCard";
 
-export const revalidate = 3600;
+export const revalidate = 1800;
 
 export default async function MatchupsPage() {
   const data = await readLatestLeagueData();

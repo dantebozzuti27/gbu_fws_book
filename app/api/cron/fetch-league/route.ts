@@ -25,6 +25,10 @@ import { computeStrengthOfSchedule } from "@/lib/odds/schedule";
 import { computeMatchupOdds } from "@/lib/odds/matchups";
 import { runSeasonSimulation } from "@/lib/odds/simulation";
 import type { LeagueData, LineupEfficiency } from "@/lib/types";
+import {
+  isVercelCronInvocation,
+  shouldRunScheduledLeagueFetch,
+} from "@/lib/cron-schedule";
 
 export const maxDuration = 120;
 
@@ -36,6 +40,16 @@ export async function GET(request: Request) {
 
   if (cronSecret && cronSecret !== "your_cron_secret_here" && authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const now = new Date();
+  if (isVercelCronInvocation(request) && !shouldRunScheduledLeagueFetch(now)) {
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      reason: "outside_cron_window",
+      timestamp: now.toISOString(),
+    });
   }
 
   try {

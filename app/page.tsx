@@ -4,7 +4,7 @@ import { TeamCard } from "@/components/TeamCard";
 import { formatOdds } from "@/lib/odds/utils";
 import Link from "next/link";
 
-export const revalidate = 3600;
+export const revalidate = 1800;
 
 export default async function Home() {
   const data = await readLatestLeagueData();
