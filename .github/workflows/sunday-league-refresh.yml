@@ -1,0 +1,29 @@
+# Vercel Hobby only allows one cron/day. This workflow hits the same API route
+# every 30 minutes during UTC windows that cover Eastern Sunday 11:00–23:30
+# (the handler skips unless America/New_York is Sunday in that range).
+#
+# Repo secrets (Settings → Secrets → Actions):
+#   FETCH_LEAGUE_URL — e.g. https://your-deployment.vercel.app/api/cron/fetch-league
+#   VERCEL_CRON_SECRET — same value as CRON_SECRET on Vercel
+name: Sunday league refresh (30 min)
+
+on:
+  schedule:
+    - cron: "*/30 15-23 * * 0"
+    - cron: "*/30 0-4 * * 1"
+  workflow_dispatch:
+
+jobs:
+  fetch-league:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger fetch-league
+        env:
+          URL: ${{ secrets.FETCH_LEAGUE_URL }}
+          SECRET: ${{ secrets.VERCEL_CRON_SECRET }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$SECRET" ]; then
+            echo "Skip: set FETCH_LEAGUE_URL and VERCEL_CRON_SECRET in repo secrets."
+            exit 0
+          fi
+          curl -sS -f -H "Authorization: Bearer ${SECRET}" "$URL"
