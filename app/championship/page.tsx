@@ -83,8 +83,6 @@ export default async function ChampionshipPage() {
             <div className="space-y-3">
               {contenders.map((team) => {
                 const champPct = team.winChampionshipProb * 100;
-                const finalsPct = team.makeFinalsProb * 100;
-                const semisPct = team.makeSemisProb * 100;
 
                 return (
                   <div key={team.teamId} className="space-y-1">
@@ -96,37 +94,11 @@ export default async function ChampionshipPage() {
                         {champPct.toFixed(1)}%
                       </span>
                     </div>
-                    <div className="flex h-2 rounded-full overflow-hidden bg-zinc-800 gap-px">
+                    <div className="h-2 rounded-full overflow-hidden bg-zinc-800">
                       <div
-                        className="bg-emerald-500 rounded-l-full"
-                        style={{ width: `${champPct}%` }}
+                        className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                        style={{ width: `${Math.min(100, champPct)}%` }}
                       />
-                      <div
-                        className="bg-amber-500"
-                        style={{
-                          width: `${Math.max(0, finalsPct - champPct)}%`,
-                        }}
-                      />
-                      <div
-                        className="bg-zinc-600 rounded-r-full"
-                        style={{
-                          width: `${Math.max(0, semisPct - finalsPct)}%`,
-                        }}
-                      />
-                    </div>
-                    <div className="flex gap-3 text-[10px] text-zinc-600">
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                        Win
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-                        Finals
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 inline-block" />
-                        Semis
-                      </span>
                     </div>
                   </div>
                 );

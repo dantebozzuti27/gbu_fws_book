@@ -192,8 +192,6 @@ export interface ChampionshipOdds {
   teamId: number;
   teamName: string;
   winChampionshipProb: number;
-  makeFinalsProb: number;
-  makeSemisProb: number;
   americanOdds: number;
 }
 

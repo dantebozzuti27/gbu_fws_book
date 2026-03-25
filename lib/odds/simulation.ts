@@ -106,23 +106,11 @@ export function runSeasonSimulation(
     }
 
     const champion = simulatePlayoffBracket(playoffTeams, projMap);
-    if (champion) {
+    if (champion !== null) {
       counters.wonChampionship.set(
-        champion.champId,
-        (counters.wonChampionship.get(champion.champId) ?? 0) + 1
+        champion,
+        (counters.wonChampionship.get(champion) ?? 0) + 1
       );
-      for (const fId of champion.finalistIds) {
-        counters.madeFinals.set(
-          fId,
-          (counters.madeFinals.get(fId) ?? 0) + 1
-        );
-      }
-      for (const sId of champion.semisIds) {
-        counters.madeSemis.set(
-          sId,
-          (counters.madeSemis.get(sId) ?? 0) + 1
-        );
-      }
     }
   }
 
@@ -177,12 +165,7 @@ export function runSeasonSimulation(
 
   const rawChampData = teams.map((t) => {
     const champRaw = counters.wonChampionship.get(t.id) ?? 0;
-    const finalsRaw = counters.madeFinals.get(t.id) ?? 0;
-    const semisRaw = counters.madeSemis.get(t.id) ?? 0;
-
     const champProb = (champRaw + 1) / (SIMULATION_RUNS + teamCount);
-    const finalsProb = (finalsRaw + 1) / (SIMULATION_RUNS + teamCount);
-    const semisProb = (semisRaw + 1) / (SIMULATION_RUNS + teamCount);
 
     const rawPlayoff = rawPlayoffMap.get(t.id) ?? champProb;
     const blendedPlayoff = playoffOdds.find((p) => p.teamId === t.id)?.makePlayoffProb ?? rawPlayoff;
@@ -192,8 +175,6 @@ export function runSeasonSimulation(
       teamId: t.id,
       teamName: t.name,
       champProb: champProb * espnRatio,
-      finalsProb: finalsProb * espnRatio,
-      semisProb: semisProb * espnRatio,
     };
   });
 
@@ -202,15 +183,11 @@ export function runSeasonSimulation(
 
   const championshipOdds: ChampionshipOdds[] = rawChampData.map((d) => {
     const normChamp = d.champProb * champScale;
-    const normFinals = Math.min(1, d.finalsProb * champScale);
-    const normSemis = Math.min(1, d.semisProb * champScale);
 
     return {
       teamId: d.teamId,
       teamName: d.teamName,
       winChampionshipProb: Math.round(normChamp * 10000) / 10000,
-      makeFinalsProb: Math.round(normFinals * 10000) / 10000,
-      makeSemisProb: Math.round(normSemis * 10000) / 10000,
       americanOdds: probabilityToAmericanOdds(normChamp),
     };
   });
@@ -245,21 +222,13 @@ function rankStandings(standings: Map<number, StandingsEntry>): StandingsEntry[]
   return entries;
 }
 
-interface PlayoffResult {
-  champId: number;
-  finalistIds: number[];
-  semisIds: number[];
-}
-
 function simulatePlayoffBracket(
   seeds: StandingsEntry[],
   projMap: Map<number, TeamProjection>
-): PlayoffResult | null {
+): number | null {
   if (seeds.length < 2) return null;
 
   const seedIds = seeds.map((s) => s.teamId);
-  const semisIds = [...seedIds];
-
   let bracket = [...seedIds];
   if (bracket.length >= 4) {
     const round1: number[] = [];
@@ -272,7 +241,6 @@ function simulatePlayoffBracket(
     bracket = round1;
   }
 
-  const finalistIds = [...bracket];
   while (bracket.length > 1) {
     const nextRound: number[] = [];
     for (let i = 0; i < bracket.length; i += 2) {
@@ -285,7 +253,7 @@ function simulatePlayoffBracket(
     bracket = nextRound;
   }
 
-  return { champId: bracket[0], finalistIds, semisIds };
+  return bracket[0];
 }
 
 function simulateMatchup(
@@ -306,8 +274,6 @@ interface SimCounters {
   madePlayoffs: Map<number, number>;
   topSeed: Map<number, number>;
   wonChampionship: Map<number, number>;
-  madeFinals: Map<number, number>;
-  madeSemis: Map<number, number>;
 }
 
 function initCounters(teamIds: number[]): SimCounters {
@@ -315,15 +281,11 @@ function initCounters(teamIds: number[]): SimCounters {
     madePlayoffs: new Map(),
     topSeed: new Map(),
     wonChampionship: new Map(),
-    madeFinals: new Map(),
-    madeSemis: new Map(),
   };
   for (const id of teamIds) {
     counters.madePlayoffs.set(id, 0);
     counters.topSeed.set(id, 0);
     counters.wonChampionship.set(id, 0);
-    counters.madeFinals.set(id, 0);
-    counters.madeSemis.set(id, 0);
   }
   return counters;
 }

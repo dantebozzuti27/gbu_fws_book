@@ -76,12 +76,6 @@ export function ChampionshipOddsTable({ odds }: ChampionshipOddsTableProps) {
               <span className="text-zinc-300">
                 Win {(team.winChampionshipProb * 100).toFixed(1)}%
               </span>
-              <span className="text-zinc-500">
-                Finals {(team.makeFinalsProb * 100).toFixed(1)}%
-              </span>
-              <span className="text-zinc-600">
-                Semis {(team.makeSemisProb * 100).toFixed(1)}%
-              </span>
             </div>
             <div className="mt-1.5">
               <ProbabilityBar probability={team.winChampionshipProb} />
